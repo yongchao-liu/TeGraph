@@ -1,0 +1,181 @@
+#ifndef __MATCH_H__
+#define __MATCH_H__
+#include "src/state.hpp"
+#include "src/graph2.hpp"
+
+using namespace std;
+void outputResult(State *s);
+bool check_edge(ut tmp1,ut tmp2,Graph_block *g1,Graph_block *g2,State *s);
+bool getFsem( Graph_block *g1,  Graph_block *g2,  State *s, ut n,ut m);
+void match(Graph_block *g1, Graph_block *g2, State *s, FILE * fp,ut * label,ut *label1);
+int check(Time t1, Time t2);
+
+int check(Time t1, Time t2){
+	if(t1.second<t2.first){
+		return 0;
+	}
+	if(t1.first>t2.second){
+		return 1;
+	}
+	if(t1.first==t2.first&&t1.second==t2.second) return 2;
+	if(t1.first>=t2.first&&t1.second<=t2.second) return 3;
+	if(t2.first>=t1.first&&t2.second<=t1.second) return 4;
+	if(t1.second>=t2.first) return 5;
+	return 6;
+}
+
+void outputResult(State *s,FILE *fp) {
+	s->all_match++;
+//	printf("fuccccckkkk\n");
+    for(ut i = 0; i < s->point_num; i++){ 
+		fprintf(fp,"%d %d\n", s->point[i].n, s->point[i].m);
+    }
+    fprintf(fp,"\n\n");
+}
+
+bool check_edge(Time tmp1,Time tmp2,State *s){
+	if(tmp1.first!=-1){
+		if(tmp2.first==-1){
+		//	printf("fuck2\n");
+			return false;
+		}
+		for(ut i=0;i<s->edge_num;i++){
+			Point_time pp=s->edge[i];
+			if(check(tmp1,pp.n)!=check(tmp2,pp.m)){
+		//	printf("fuck22\n");
+				return false;
+			}
+		}
+	}
+	else{
+		if(tmp2.first!=-1){
+		//	printf("fuck222\n");
+			return false;
+		}
+	}
+	return true;
+}
+bool getFsem( Graph_block *g1,  Graph_block *g2,  State *s, ut n,ut m) {
+	ut np, mp, w1, w2,t_begin,t_end;
+	ut all=0;
+	for(ut i=0;i<s->point_num;i++){
+		Point p=s->point[i];
+		Time tmp1=g1->getoutside(n,p.n);
+		Time tmp2=g2->getoutside(m,p.m);
+//		printf("%d %d %d\n",tmp1.first,n,p.n);
+//		printf("%d %d %d\n",tmp2.first,m,p.m);
+		if(!check_edge(tmp1,tmp2,s)) return false;
+		//reverse edge
+		tmp1=g1->getoutside(p.n,n);
+		tmp2=g2->getoutside(p.m,m);
+		if(!check_edge(tmp1,tmp2,s)) return false;
+	}
+	return true;
+}
+
+void match(Graph_block *g1,Graph_block *g2, State *s,FILE *fp,ut *label ,ut *label1) {
+    if (s->point_num == g1->getSize()) {
+		outputResult(s,fp);
+        return ;
+    }
+//	printf("fuck\n");
+	
+    ut  n;
+	for(ut i=1;i<=g1->getSize();i++){
+		if(s->exist_point.find(i)==s->exist_point.end()){
+			n=i;
+			break;
+		}
+	}
+	s->exist_point.insert(n);
+	map<ut,ut>:: iterator it;
+	for(it=g2->vertice.begin();it!=g2->vertice.end();it++){
+		ut i=it->first;
+		if(s->exist_point2.find(i)!=s->exist_point2.end()) continue;
+////		if(n==3){
+	//		printf("%d\n",i);
+	//	}
+		if(label[n]!=label1[i]) continue;
+		if(getFsem(g1,g2,s,n,i)){
+	//		printf("%d %d\n",n,i);
+	//		printf("fuck1\n");
+			s->point[s->point_num++]=(Point(n,i));
+			ut nn=s->edge_num;
+			if(g2->head.find(i)!=g2->head.end()){
+				for(Time u=g2->head[i];u.first!=-1;u=g2->block_num[u.first][u.second].next){
+					ut v=g1->block_num[u.first][u.second].v;
+					if(s->exist_point.find(v)!=s->exist_point.end()){
+						Time no=g2->getoutside(i,s->core[v]);
+						s->edge[s->edge_num++]=Point_time(g1->block_num[u.first][u.second].time,no);
+					}
+				}
+			}
+			if(g1->rhead.find(n)!=g1->rhead.end()){
+				for(Time u=g1->rhead[n];u.first!=-1;u=g1->rblock_num[u.first][u.second].next){
+					ut v=g1->rblock_num[u.first][u.second].v;
+					if(s->exist_point.find(v)!=s->exist_point.end()){
+						Time no=g2->getoutside(s->core[v],i);
+						s->edge[s->edge_num++]=Point_time(g1->rblock_num[u.first][u.second].time,no);
+					}
+				}
+			}
+			//return ;
+			/*
+			for(ut j=g1->getRhead(n);j!=0;j=g1->redge[j].next){
+				if(s->exist_point.find(g1->redge[j].v)!=s->exist_point.end()){
+					s->edge[s->edge_num++]=Point(j,g2->getoutside(s->core[g1->redge[j].v],i));
+			//		printf("%d\n",s->edge_num);
+	//				tot++;
+					//printf("%d\n",tot);
+				}
+			}*/
+			s->core[n]=i;
+			s->exist_point2.insert(i);
+			match(g1,g2,s,fp,label,label1);
+			s->exist_point2.erase(i);
+			s->edge_num=nn;
+			s->point_num--;
+	//		printf("ff %d %d\n",s->edge_num,s->point_num);
+		}
+	}
+//	printf("fuck5\n");
+	s->exist_point.erase(n);
+//	printf("fuck6\n");
+	return ;
+}
+
+void match_single(Graph_block *g1,Graph_block *g2, State *s,FILE *fp,ut *label ,ut *label1 ,Edge_pure st) {
+	if(s->point_num==0){
+		for(ut i=1;i<=g1->getSize();i++){
+			s->core[i]=st.from;
+			s->point[s->point_num++]=(Point(i,st.from));
+			s->exist_point.insert(i);
+			s->exist_point2.insert(st.from);
+			for(Time u=g1->head[i];u.first!=-1;u=g1->block_num[u.first][u.second].next){
+				ut v=g1->block_num[u.first][u.second].v;
+				s->core[v]=st.to;
+				s->point[s->point_num++]=(Point(v,st.to));
+				s->exist_point.insert(v);
+				s->exist_point2.insert(st.to);
+
+				Time no=Time(st.begin_time,st.end_time);
+				s->edge[s->edge_num++]=Point_time(g1->block_num[u.first][u.second].time,no);
+				match(g1,g2,s,fp,label,label1);
+				s->exist_point.erase(v);
+				s->exist_point2.erase(st.to);
+				s->point_num--;
+				s->edge_num--;
+			}
+			s->exist_point.erase(i);
+			s->exist_point2.erase(st.from);
+			s->point_num--;
+		}
+	}
+	else{
+		match(g1,g2,s,fp,label,label1);
+	}
+//	printf("fuck6\n");
+	return ;
+}
+
+#endif
